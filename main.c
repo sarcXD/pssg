@@ -1,9 +1,13 @@
 #include <windows.h>
 #include <stdio.h>
-# define bool int
-# define true 1
-# define false 0
+#define bool int
+#define true 1
+#define false 0
+#define MToKB(mb) (mb*1024)
+#define MToB(mb) (mb*1024*1024)
+#define ALLOCSIZE MToB(10)
 
+static char readBuffer[ALLOCSIZE];
 // Utility Functions
 /**
  * @brief Self Implemented string compare operation
@@ -13,7 +17,7 @@
  * @return true 
  * @return false 
  */
-bool p_strcmp(char *given, char *toMatch) {
+bool p_StrCmp(char *given, char *toMatch) {
   int i = 0;
   while (given[i] != '\0' && toMatch[i] != '\0') 
   {
@@ -31,14 +35,17 @@ bool p_strcmp(char *given, char *toMatch) {
  * @return true 
  * @return false 
  */
-bool p_strcmpfile(char *given, char *filePath);
+bool p_FindInFile(char *given, char *filePath);
 
 
-void SearchInPath(char *fileDir, char *ignoreFile[]) {
+void SearchInPath(char *fileDir, char *ignoreFile) {
   WIN32_FIND_DATA ffd;
   HANDLE hFind;
   LARGE_INTEGER filesize;
   DWORD dwError=0;
+  // 1. update the fileDir with \\*
+  strcat(fileDir, (char *)("\\*"));
+  // 2. Read file
   hFind = FindFirstFile(fileDir, &ffd);
   if (hFind == INVALID_HANDLE_VALUE) 
   {
@@ -47,9 +54,9 @@ void SearchInPath(char *fileDir, char *ignoreFile[]) {
   }
   do
   {
-    if ((p_strcmp(ffd.cFileName,".") || p_strcmp(ffd.cFileName, ".."))
+    if ((p_StrCmp(ffd.cFileName,".") || p_StrCmp(ffd.cFileName, ".."))
     /* && p_strcmpfile */) continue;
-    if (p_strcmp(ffd.cFileName,".pssd")) continue; // pssd folder
+    if (p_StrCmp(ffd.cFileName,".pssd")) continue; // pssd folder
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         printf("  %s   <DIR>\n", ffd.cFileName);
@@ -65,14 +72,27 @@ void SearchInPath(char *fileDir, char *ignoreFile[]) {
   FindClose(hFind);
 }
 
-void LoadIgnoreFile(char *fileDir) {
-
+void LoadIgnoreFile(char *ignoreFile, char *fileReadBuf) {
+  // Windows specific stuff
+  FILE *file;
+  LARGE_INTEGER fsize;
+  // open file
+  file = fopen(ignoreFile, "r");
+  // get file size
+  fseek(file, 0, SEEK_END); // seek to end of file
+  long int size = ftell(file); // get current file pointer
+  fseek(file, 0, SEEK_SET);
+  char *line;
+  do {
+    fgets(line, size, file);
+  } while (line != NULL); // EOF -> line = NULL
 }
 
 void SearchAndReplace(char *fileDir) {
-  char *ignoreFile; 
-  LoadIgnoreFile(fileDir, ignoreFile); 
-  SearchInPath(fileDir, ignoreFile);
+  char *fileReadBuf = readBuffer;
+  char *ignoreFile = ".gitignore";
+  LoadIgnoreFile(ignoreFile, fileReadBuf);
+  SearchInPath(fileDir, fileReadBuf);
   // ReplaceInPath
 }
 

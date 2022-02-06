@@ -1,7 +1,7 @@
 # PSSG
 
 This is a very simple static site generator. In reality this does not even do the conventional
-static site generation.
+static site generation. _that comes later_
 
 All this does is to allow a user to define html objects. Doing so requires the user to define a
 custom object as follows:
