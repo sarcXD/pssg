@@ -11,10 +11,10 @@
 #define ALLOCSIZE MToB(10)
 char Buffer[ALLOCSIZE];
 char *allocp = Buffer;
-struct {
+struct ProgState{
   char *configPath; // .ppsg files path
   char *ignorefile; // .gitignore file
-} ProgState;
+};
 
 // Utility Functions
 /**
@@ -112,7 +112,7 @@ void p_stfree_ch(char *ptr) {
 
 //**********UTIL END********************
 
-void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
+void SearchInPath(char *fileDir, char *ignoreFile, int numl, struct ProgState state) {
   WIN32_FIND_DATA ffd;
   HANDLE hFind;
   LARGE_INTEGER filesize;
@@ -137,8 +137,10 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) strcat(ffd.cFileName,"/");
     // ..checking entries with ignore file
     if (p_strcmpMulti(ffd.cFileName,ignoreFile, numl)) continue;
-    if (p_strcmp(ffd.cFileName,".pssd")) {
-     continue; // pssd folder 
+    if (p_strcmp(ffd.cFileName,".pssg/")) {
+      strcpy(state.configPath, fileDir);
+      strcat(state.configPath,"/.pssg/");
+      continue; // pssg folder 
     }
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
@@ -157,14 +159,17 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
 }
 
 void SearchAndReplace(char *fileDir) {
+  struct ProgState state;
+  state.configPath = p_stalloc_ch(STR_MAXLEN); 
   char *fileReadBuff = p_stalloc_ch(STR_MAXLEN*FILE_MAXLEN);
   char *ignorefpath = p_stalloc_ch(STR_MAXLEN);
   strcpy(ignorefpath, fileDir);
   strcat(ignorefpath,"\\.gitignore");
   int numl = readFile(ignorefpath, fileReadBuff);
   p_stfree_ch(ignorefpath);
-  SearchInPath(fileDir, fileReadBuff, numl);
+  SearchInPath(fileDir, fileReadBuff, numl, state);
   p_stfree_ch(fileReadBuff);
+  p_stfree_ch(state.configPath);
 }
 
 int main( int argc, char *argv[]) {
