@@ -1,5 +1,7 @@
 # PSSG
 
+## In progress
+
 This is a very simple static site generator. In reality this does not even do the conventional
 static site generation. _that comes later_
 
