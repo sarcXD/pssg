@@ -6,6 +6,8 @@
 #define MToKB(mb) (mb*1024)
 #define MToB(mb) (mb*1024*1024)
 #define ALLOCSIZE MToB(10)
+#define STR_MAXLEN 50
+#define FILE_MAXLEN 50
 
 static char readBuffer[ALLOCSIZE];
 // Utility Functions
@@ -17,9 +19,9 @@ static char readBuffer[ALLOCSIZE];
  * @return true 
  * @return false 
  */
-bool p_StrCmp(char *given, char *toMatch) {
+bool p_strcmp(char *given, char *toMatch) {
   int i = 0;
-  while (given[i] != '\0' && toMatch[i] != '\0') 
+  while ((given[i] != '\0' && toMatch[i] != '\0')) 
   {
     if (given[i] != toMatch[i]) return false;
     i++;
@@ -27,24 +29,41 @@ bool p_StrCmp(char *given, char *toMatch) {
   return given[i] != toMatch[i] ? false : true; 
 }
 
-/**
- * @brief Compares the string with each line of a given file
- * 
- * @param given variable string
- * @param filePath path to file to open
- * @return true 
- * @return false 
- */
-bool p_FindInFile(char *given, char *filePath);
+bool p_strcmpMulti(char *given, char *Mstr, int numl) {
+  bool res = false; 
+  while (numl-->0 && *Mstr != '\0') {
+    res = res | p_strcmp(Mstr,given);
+    if (res) return res;
+    Mstr+=STR_MAXLEN;
+  }
+  return res;
+}
 
+long int p_filesz(FILE *file) {
+  fseek(file, 0, SEEK_END); // seek to end of file
+  long int size = ftell(file); // get current file pointer
+  fseek(file, 0, SEEK_SET);
+  return size;
+}
 
-void SearchInPath(char *fileDir, char *ignoreFile) {
+void p_replaceChar(char *str, char find, char repl) {
+  while (*str != '\0') {
+    if (*str == find) {
+      *str = repl;
+    }
+    str++;
+  }
+}
+
+//**********UTIL END********************
+
+void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
   WIN32_FIND_DATA ffd;
   HANDLE hFind;
   LARGE_INTEGER filesize;
   DWORD dwError=0;
   // 1. update the fileDir with \\*
-  strcat(fileDir, (char *)("\\*"));
+  strcat(fileDir, (char *)("/*"));
   // 2. Read file
   hFind = FindFirstFile(fileDir, &ffd);
   if (hFind == INVALID_HANDLE_VALUE) 
@@ -54,9 +73,14 @@ void SearchInPath(char *fileDir, char *ignoreFile) {
   }
   do
   {
-    if ((p_StrCmp(ffd.cFileName,".") || p_StrCmp(ffd.cFileName, ".."))
-    /* && p_strcmpfile */) continue;
-    if (p_StrCmp(ffd.cFileName,".pssd")) continue; // pssd folder
+    // .,.. are os specific and will cause inf loops
+    if (p_strcmp(ffd.cFileName,".") || p_strcmp(ffd.cFileName, "..")) continue;
+    // win32 for some reason, retunrs a plain name, without directory `\`
+    // so we concat the directory flag to it (for simplicity)
+    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) strcat(ffd.cFileName,"/");
+    // ..checking entries with ignore file
+    if (p_strcmpMulti(ffd.cFileName,ignoreFile, numl)) continue;
+    if (p_strcmp(ffd.cFileName,".pssd")) continue; // pssd folder
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         printf("  %s   <DIR>\n", ffd.cFileName);
@@ -72,56 +96,62 @@ void SearchInPath(char *fileDir, char *ignoreFile) {
   FindClose(hFind);
 }
 
-void LoadIgnoreFile(char *ignoreFile, char *fileReadBuf) {
+int LoadIgnoreFile(char *ignoreFile, char *fileReadBuff) {
   // Windows specific stuff
   FILE *file;
   LARGE_INTEGER fsize;
-  // open file
   file = fopen(ignoreFile, "r");
-  // get file size
-  fseek(file, 0, SEEK_END); // seek to end of file
-  long int size = ftell(file); // get current file pointer
-  fseek(file, 0, SEEK_SET);
-  char *line;
-  do {
-    fgets(line, size, file);
-  } while (line != NULL); // EOF -> line = NULL
+  long int size = p_filesz(file);
+  char *res;
+  int numl = 0;
+  // char *reader = fileReadBuff;
+  while(fgets(fileReadBuff,size,file)) {
+    p_replaceChar(fileReadBuff,'\n','\0');
+    fileReadBuff+=STR_MAXLEN;
+    numl++;
+  };
+  fclose(file);
+  return numl;
 }
 
 void SearchAndReplace(char *fileDir) {
-  char *fileReadBuf = readBuffer;
-  char *ignoreFile = ".gitignore";
-  LoadIgnoreFile(ignoreFile, fileReadBuf);
-  SearchInPath(fileDir, fileReadBuf);
+  char *fileReadBuff = readBuffer;
+  char ignorefpath[STR_MAXLEN];
+  strcpy(ignorefpath, fileDir);
+  strcat(ignorefpath,"\\.gitignore");
+  int numl = LoadIgnoreFile(ignorefpath, fileReadBuff);
+  SearchInPath(fileDir, fileReadBuff, numl);
   // ReplaceInPath
 }
 
 int main( int argc, char *argv[]) {
-  while(--argc > 0 && (*++argv)[0] == '-') {
-    char c = *++argv[0];
-    switch (c) {
-      case 'x': {
-        SearchAndReplace((++argv)[0]);
-        break;
-      }
-      case 'h': {
-        printf("PSSG: The Bloat free, static site generator (helper)\n");
-        printf("use: main.exe [arguments]\n");
-        printf("arguments             Description\n");
-        printf("x {$project folder}   Execute Custom html replacement operation. This will find any and all custom elements\n\
-                    in your static site that are marked as follows:\n\
-                    `.obj\n\
-                    Navbar`\n\
-                    The Program then searches in a .pssg\\objects folder in your root directory.\n\
-                    If it finds a Navbar.html file, it will replace all such entries in your static site html\n\
-                    With this custom html");
-        break;
-      }
-      default: {
-        printf("Unknown option, please use `main.exe -h` for help");
-        break;
+  while(--argc > 0) {
+    if ((*++argv)[0] == '-') {
+      char c = *++argv[0];
+      switch (c) {
+        case 'x': {
+          SearchAndReplace((++argv)[0]);
+          return 1;
+        }
+        case 'h': {
+          printf("PSSG: The Bloat free, static site generator (helper)\n");
+          printf("use: main.exe -[arguments]\n");
+          printf("arguments             Description\n");
+          printf("-x {$project folder}  Execute Custom html replacement operation. This will find any and all custom elements\n\
+                      in your static site that are marked as follows:\n\
+                      `.obj\n\
+                      <Navbar />`\n\
+                      The Program then searches in a .pssg\\objects folder in your root directory.\n\
+                      If it finds a Navbar.html file, it will replace all such entries in your static site html\n\
+                      With this custom html");
+          return 1;
+        }
+        default: {
+          break;
+        }
       }
     }
   }
-  return 1;
+  printf("Incorrect Execution, please use `main.exe -h` for help");
+  return 0;
 }
