@@ -35,6 +35,19 @@ bool p_strcmp(char *given, char *toMatch) {
   return given[i] != toMatch[i] ? false : true; 
 }
 
+bool p_substrcmp(char *given, char *toMatch) {
+  int res=0;
+  while(*given != '\0' && *toMatch != '\0') {
+    res &= 0;
+    while (*given++ == *toMatch && 
+    *given != '\0' && *toMatch != '\0') {
+      res |= 1;
+      toMatch++;
+    }
+  }
+  return res;
+}
+
 bool p_strcmpMulti(char *given, char *multi, int numl) {
   bool res = false; 
   while (numl-->0 && *multi != '\0') {
@@ -68,10 +81,10 @@ void p_replaceChar(char *str, char find, char repl) {
  * @param fbuff file buff (with fixed row length)
  * @return int number of lines read
  */
-int readFile(char *fpath, char *fbuff) {
+int readFile(char *fpath, char *fbuff, char *fopts) {
   FILE *file;
   LARGE_INTEGER fsize;
-  file = fopen(fpath, "r");
+  file = fopen(fpath, fopts);
   long int size = p_filesz(file);
   char *res;
   int numl = 0;
@@ -132,23 +145,27 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl, struct ProgState st
   {
     // .,.. are os specific and will cause inf loops
     if (p_strcmp(ffd.cFileName,".") || p_strcmp(ffd.cFileName, "..")) continue;
-    // win32 for some reason, retunrs a plain name, without directory `\`
-    // so we concat the directory flag to it (for simplicity)
-    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) strcat(ffd.cFileName,"/");
     // ..checking entries with ignore file
     if (p_strcmpMulti(ffd.cFileName,ignoreFile, numl)) continue;
-    if (p_strcmp(ffd.cFileName,".pssg/")) {
+    if (p_strcmp(ffd.cFileName,".pssg")) {
       strcpy(state.configPath, fileDir);
-      strcat(state.configPath,"/.pssg/");
-      continue; // pssg folder 
+      strcat(state.configPath,"/.pssg");
+      continue;
     }
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         printf("  %s   <DIR>\n", ffd.cFileName);
+        char *tempDir = p_stalloc_ch(STR_MAXLEN);
+        strcpy(tempDir, fileDir);
+        strcat(tempDir,"/");
+        strcat(tempDir,ffd.cFileName);
+        SearchInPath(tempDir, ignoreFile, numl, state);
+        p_stfree_ch(tempDir);
     }
     else {
         filesize.LowPart = ffd.nFileSizeLow;
         filesize.HighPart = ffd.nFileSizeHigh;
+        p_substrcmp(ffd.cFileName,".html") ? /*readFile*/ printf("true") : printf("false");
         printf("  %s   %lld bytes\n", ffd.cFileName, filesize.QuadPart);
     }
   }
@@ -165,7 +182,7 @@ void SearchAndReplace(char *fileDir) {
   char *ignorefpath = p_stalloc_ch(STR_MAXLEN);
   strcpy(ignorefpath, fileDir);
   strcat(ignorefpath,"\\.gitignore");
-  int numl = readFile(ignorefpath, fileReadBuff);
+  int numl = readFile(ignorefpath, fileReadBuff, "r");
   p_stfree_ch(ignorefpath);
   SearchInPath(fileDir, fileReadBuff, numl, state);
   p_stfree_ch(fileReadBuff);
@@ -173,11 +190,11 @@ void SearchAndReplace(char *fileDir) {
 }
 
 int main( int argc, char *argv[]) {
-  while(--argc > 0) {
+  while(--argc > 1) {
     if ((*++argv)[0] == '-') {
       char c = *++argv[0];
       switch (c) {
-        case 'x': {
+        case 'e': {
           SearchAndReplace((++argv)[0]);
           return 1;
         }
@@ -185,7 +202,7 @@ int main( int argc, char *argv[]) {
           printf("PSSG: The Bloat free, static site generator (helper)\n");
           printf("use: main.exe -[arguments]\n");
           printf("arguments             Description\n");
-          printf("-x {$project folder}  Execute Custom html replacement operation. This will find any and all custom elements\n\
+          printf("-e {$project folder}  Execute Custom html replacement operation. This will find any and all custom elements\n\
                       in your static site that are marked as follows:\n\
                       `.obj\n\
                       <Navbar />`\n\
