@@ -5,11 +5,17 @@
 #define false 0
 #define MToKB(mb) (mb*1024)
 #define MToB(mb) (mb*1024*1024)
-#define ALLOCSIZE MToB(10)
 #define STR_MAXLEN 50
 #define FILE_MAXLEN 50
 
-static char readBuffer[ALLOCSIZE];
+#define ALLOCSIZE MToB(10)
+char Buffer[ALLOCSIZE];
+char *allocp = Buffer;
+struct {
+  char *configPath; // .ppsg files path
+  char *ignorefile; // .gitignore file
+} ProgState;
+
 // Utility Functions
 /**
  * @brief Self Implemented string compare operation
@@ -29,12 +35,12 @@ bool p_strcmp(char *given, char *toMatch) {
   return given[i] != toMatch[i] ? false : true; 
 }
 
-bool p_strcmpMulti(char *given, char *Mstr, int numl) {
+bool p_strcmpMulti(char *given, char *multi, int numl) {
   bool res = false; 
-  while (numl-->0 && *Mstr != '\0') {
-    res = res | p_strcmp(Mstr,given);
+  while (numl-->0 && *multi != '\0') {
+    res = res | p_strcmp(multi,given);
     if (res) return res;
-    Mstr+=STR_MAXLEN;
+    multi+=STR_MAXLEN;
   }
   return res;
 }
@@ -55,6 +61,55 @@ void p_replaceChar(char *str, char find, char repl) {
   }
 }
 
+/**
+ * @brief Reads a file from a file path into a file buffer 
+ * 
+ * @param fpath filepath
+ * @param fbuff file buff (with fixed row length)
+ * @return int number of lines read
+ */
+int readFile(char *fpath, char *fbuff) {
+  FILE *file;
+  LARGE_INTEGER fsize;
+  file = fopen(fpath, "r");
+  long int size = p_filesz(file);
+  char *res;
+  int numl = 0;
+  while(fgets(fbuff,size,file)) {
+    p_replaceChar(fbuff,'\n','\0');
+    fbuff+=STR_MAXLEN;
+    numl++;
+  };
+  fclose(file);
+  return numl;
+}
+
+/**
+ * @brief Naive Stack Alloc impl
+ * 
+ * @param ptr pointer to allocate space to
+ * @param reqSz size we need to allocate
+ */
+char *p_stalloc_ch(int reqSz) {
+  if (Buffer + ALLOCSIZE - allocp >= reqSz) {
+    allocp+=reqSz;
+    return allocp-reqSz;
+  }
+  return 0;
+};
+
+/**
+ * @brief Naive Stack Free impl
+ * 
+ * @param ptr the pointer we want to free
+ * @param sz the size of the pointer to free
+ */
+void p_stfree_ch(char *ptr) {
+  if (ptr >= Buffer && ptr <= Buffer + ALLOCSIZE) {
+    allocp = ptr;
+  }
+};
+
 //**********UTIL END********************
 
 void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
@@ -62,10 +117,12 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
   HANDLE hFind;
   LARGE_INTEGER filesize;
   DWORD dwError=0;
-  // 1. update the fileDir with \\*
-  strcat(fileDir, (char *)("/*"));
+  // 1. update the fileDir with /*
+  char *wfileDir=p_stalloc_ch(STR_MAXLEN);
+  strcpy(wfileDir,fileDir);
+  strcat(wfileDir, (char *)("/*"));
   // 2. Read file
-  hFind = FindFirstFile(fileDir, &ffd);
+  hFind = FindFirstFile(wfileDir, &ffd);
   if (hFind == INVALID_HANDLE_VALUE) 
   {
     printf ("FindFirstFile failed (%d)\n", GetLastError());
@@ -80,7 +137,9 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) strcat(ffd.cFileName,"/");
     // ..checking entries with ignore file
     if (p_strcmpMulti(ffd.cFileName,ignoreFile, numl)) continue;
-    if (p_strcmp(ffd.cFileName,".pssd")) continue; // pssd folder
+    if (p_strcmp(ffd.cFileName,".pssd")) {
+     continue; // pssd folder 
+    }
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         printf("  %s   <DIR>\n", ffd.cFileName);
@@ -93,35 +152,19 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl) {
   }
   while (FindNextFile(hFind, &ffd) != 0);
   dwError = GetLastError();
+  p_stfree_ch(wfileDir);
   FindClose(hFind);
 }
 
-int LoadIgnoreFile(char *ignoreFile, char *fileReadBuff) {
-  // Windows specific stuff
-  FILE *file;
-  LARGE_INTEGER fsize;
-  file = fopen(ignoreFile, "r");
-  long int size = p_filesz(file);
-  char *res;
-  int numl = 0;
-  // char *reader = fileReadBuff;
-  while(fgets(fileReadBuff,size,file)) {
-    p_replaceChar(fileReadBuff,'\n','\0');
-    fileReadBuff+=STR_MAXLEN;
-    numl++;
-  };
-  fclose(file);
-  return numl;
-}
-
 void SearchAndReplace(char *fileDir) {
-  char *fileReadBuff = readBuffer;
-  char ignorefpath[STR_MAXLEN];
+  char *fileReadBuff = p_stalloc_ch(STR_MAXLEN*FILE_MAXLEN);
+  char *ignorefpath = p_stalloc_ch(STR_MAXLEN);
   strcpy(ignorefpath, fileDir);
   strcat(ignorefpath,"\\.gitignore");
-  int numl = LoadIgnoreFile(ignorefpath, fileReadBuff);
+  int numl = readFile(ignorefpath, fileReadBuff);
+  p_stfree_ch(ignorefpath);
   SearchInPath(fileDir, fileReadBuff, numl);
-  // ReplaceInPath
+  p_stfree_ch(fileReadBuff);
 }
 
 int main( int argc, char *argv[]) {
