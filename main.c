@@ -9,7 +9,7 @@
 #define FILE_MAXLEN 50
 
 #define ALLOCSIZE MToB(10)
-char Buffer[ALLOCSIZE];
+static char Buffer[ALLOCSIZE];
 char *allocp = Buffer;
 struct ProgState{
   char *configPath; // .ppsg files path
