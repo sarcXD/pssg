@@ -1,1 +1,1 @@
-cl.exe main.c
+cl.exe /Zi main.c

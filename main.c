@@ -1,104 +1,35 @@
 #include <windows.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include "lib\p_lib.h"
 #define bool int
 #define true 1
 #define false 0
 #define MToKB(mb) (mb*1024)
 #define MToB(mb) (mb*1024*1024)
-#define STR_MAXLEN 50
-#define FILE_MAXLEN 50
-
-#define ALLOCSIZE MToB(10)
-static char Buffer[ALLOCSIZE];
-char *allocp = Buffer;
+#define STR_MAXLEN 64
+#define FILE_MAXLEN 64
+#define ALLOCSIZE MToB(64)
+char *Buffer;
+char *allocp;
 struct ProgState{
   char *configPath; // .ppsg files path
   char *ignorefile; // .gitignore file
 };
 
+struct configState {
+  /*
+    how this is organized: 
+    char name -> File data, 
+    char name -> File data,
+    ...
+  */
+  char *obj;
+};
+
 // Utility Functions
 /**
- * @brief Self Implemented string compare operation
- * 
- * @param given variable char * 
- * @param toMatch constant char *
- * @return true 
- * @return false 
- */
-bool p_strcmp(char *given, char *toMatch) {
-  int i = 0;
-  while ((given[i] != '\0' && toMatch[i] != '\0')) 
-  {
-    if (given[i] != toMatch[i]) return false;
-    i++;
-  }
-  return given[i] != toMatch[i] ? false : true; 
-}
-
-bool p_substrcmp(char *given, char *toMatch) {
-  int res=0;
-  while(*given != '\0' && *toMatch != '\0') {
-    res &= 0;
-    while (*given++ == *toMatch && 
-    *given != '\0' && *toMatch != '\0') {
-      res |= 1;
-      toMatch++;
-    }
-  }
-  return res;
-}
-
-bool p_strcmpMulti(char *given, char *multi, int numl) {
-  bool res = false; 
-  while (numl-->0 && *multi != '\0') {
-    res = res | p_strcmp(multi,given);
-    if (res) return res;
-    multi+=STR_MAXLEN;
-  }
-  return res;
-}
-
-long int p_filesz(FILE *file) {
-  fseek(file, 0, SEEK_END); // seek to end of file
-  long int size = ftell(file); // get current file pointer
-  fseek(file, 0, SEEK_SET);
-  return size;
-}
-
-void p_replaceChar(char *str, char find, char repl) {
-  while (*str != '\0') {
-    if (*str == find) {
-      *str = repl;
-    }
-    str++;
-  }
-}
-
-/**
- * @brief Reads a file from a file path into a file buffer 
- * 
- * @param fpath filepath
- * @param fbuff file buff (with fixed row length)
- * @return int number of lines read
- */
-int readFile(char *fpath, char *fbuff, char *fopts) {
-  FILE *file;
-  LARGE_INTEGER fsize;
-  file = fopen(fpath, fopts);
-  long int size = p_filesz(file);
-  char *res;
-  int numl = 0;
-  while(fgets(fbuff,size,file)) {
-    p_replaceChar(fbuff,'\n','\0');
-    fbuff+=STR_MAXLEN;
-    numl++;
-  };
-  fclose(file);
-  return numl;
-}
-
-/**
- * @brief Naive Stack Alloc impl
+ * @brief Basic Stack Alloc impl
  * 
  * @param ptr pointer to allocate space to
  * @param reqSz size we need to allocate
@@ -112,7 +43,7 @@ char *p_stalloc_ch(int reqSz) {
 };
 
 /**
- * @brief Naive Stack Free impl
+ * @brief Basic Stack Free impl
  * 
  * @param ptr the pointer we want to free
  * @param sz the size of the pointer to free
@@ -146,7 +77,8 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl, struct ProgState st
     // .,.. are os specific and will cause inf loops
     if (p_strcmp(ffd.cFileName,".") || p_strcmp(ffd.cFileName, "..")) continue;
     // ..checking entries with ignore file
-    if (p_strcmpMulti(ffd.cFileName,ignoreFile, numl)) continue;
+    if (p_strcmpMulti(ffd.cFileName,ignoreFile, numl, STR_MAXLEN)) continue;
+    // if the dir is the pssg config
     if (p_strcmp(ffd.cFileName,".pssg")) {
       strcpy(state.configPath, fileDir);
       strcat(state.configPath,"/.pssg");
@@ -176,13 +108,17 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl, struct ProgState st
 }
 
 void SearchAndReplace(char *fileDir) {
+  // Memory init
+  Buffer = (char *) malloc (ALLOCSIZE);
+  allocp = Buffer;
   struct ProgState state;
   state.configPath = p_stalloc_ch(STR_MAXLEN); 
   char *fileReadBuff = p_stalloc_ch(STR_MAXLEN*FILE_MAXLEN);
   char *ignorefpath = p_stalloc_ch(STR_MAXLEN);
   strcpy(ignorefpath, fileDir);
   strcat(ignorefpath,"\\.gitignore");
-  int numl = readFile(ignorefpath, fileReadBuff, "r");
+  printf(ignorefpath);
+  int numl = readFile(ignorefpath, fileReadBuff, "r", STR_MAXLEN);
   p_stfree_ch(ignorefpath);
   SearchInPath(fileDir, fileReadBuff, numl, state);
   p_stfree_ch(fileReadBuff);
@@ -190,7 +126,7 @@ void SearchAndReplace(char *fileDir) {
 }
 
 int main( int argc, char *argv[]) {
-  while(--argc > 1) {
+  while(--argc > 0) {
     if ((*++argv)[0] == '-') {
       char c = *++argv[0];
       switch (c) {
