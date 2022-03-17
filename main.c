@@ -1,7 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "lib\p_lib.h"
+#include "lib/p_lib.h"
 #define bool int
 #define true 1
 #define false 0
