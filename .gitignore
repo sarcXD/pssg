@@ -1,6 +1,7 @@
 .vscode
 .vs
 lib/
+temp/
 *.obj
 *.pdb
 *.exe

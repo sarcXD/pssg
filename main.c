@@ -20,7 +20,7 @@ char *Buffer;
 char *allocp;
 struct ProgState{
   char *configPath; // .ppsg files path
-  KV_Pair *LookupTable; // pssg files store in a basic lookup table
+  LookupTable *table; // pssg files store in a basic lookup table
 };
 
 // Utility Functions
@@ -98,7 +98,7 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl, struct ProgState st
     }
     if (p_substrcmp(fileDir,".pssg")) {
       // load into state LookupTable
-      printf("This is pssg file %s",ffd.cFileName);
+
     }
     printf("|  %s   %lld bytes\n", ffd.cFileName, filesize.QuadPart);
   }
@@ -108,14 +108,32 @@ void SearchInPath(char *fileDir, char *ignoreFile, int numl, struct ProgState st
   FindClose(hFind);
 }
 
+
 void SearchAndReplace(char *fileDir) {
-  // Memory init
+  // @Mem Memory init
   Buffer = (char *) malloc (ALLOCSIZE);
   allocp = Buffer;
+  // @MemEnd
   struct ProgState state;
   state.configPath = p_stalloc_ch(STR_MAXLEN);
   char *fileReadBuff = p_stalloc_ch(STR_MAXLEN*GIT_IGN_MAXLEN);
-  state.LookupTable = p_stalloc_ch(STR_MAXLEN*FILE_MAXLEN*MAX_PSSG_FILES); // 3.12~ mb
+  // Memory allocation size explanation 
+  //          key     +    max(str)*max(lines)
+  const int kvSz = STR_MAXLEN + STR_MAXLEN*FILE_MAXLEN;
+  //             KV_Pair Size*max(files)      + count
+  KV_Pair *buckets = p_stalloc_ch(kvSz*MAX_PSSG_FILES);
+  LookupTable table = {buckets, 0};
+  // const int tableSz = (kvSz*MAX_PSSG_FILES) + 32;
+  state.table = &table; // 3.13~ mb
+
+  LookupPush(state.table, kvSz, "testKey", "This is a test value");
+  KV_Pair *testRes = LookupGet(state.table, "testKey");
+  LookupPop(state.table, kvSz);
+  // @debug
+  free(Buffer);
+  return;
+  // @debugEnd
+
   char *ignorefpath = p_stalloc_ch(STR_MAXLEN);
   strcpy(ignorefpath, fileDir);
   strcat(ignorefpath,"/.gitignore");
