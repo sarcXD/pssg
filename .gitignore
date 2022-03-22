@@ -2,6 +2,7 @@
 .vs
 lib/
 temp/
+build/
 *.obj
 *.pdb
 *.exe
